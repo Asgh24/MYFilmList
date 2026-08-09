@@ -1,0 +1,6 @@
+{
+  "name": "myFILMlist",
+  "description": "Smart Local Movie, Series, and Anime File Manager with filename parsing, AniList & TMDB metadata retrieval, external playback intents, and AI recommendations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
