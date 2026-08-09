@@ -27,7 +27,7 @@ jobs:
         run: |
           keytool -genkey -v -keystore debug.keystore \
             -keyalg RSA -keysize 2048 -validity 10000 \
-            -alias android -storepass android -keypass android \
+            -alias androiddebugkey -storepass android -keypass android \
             -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, S=Debug, C=US"
 
       - name: Grant execute permission to gradlew
