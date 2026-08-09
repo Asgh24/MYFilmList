@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch: {}   # allows manual "Run workflow" button in the Actions tab
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -21,16 +21,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Generate a debug keystore at the repository root to match
+      # signingConfigs.debugConfig (storeFile = file("${rootDir}/debug.keystore"))
+      - name: Create debug keystore
+        run: |
+          keytool -genkey -v -keystore debug.keystore \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias android -storepass android -keypass android \
+            -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, S=Debug, C=US"
+
       - name: Grant execute permission to gradlew
         run: chmod +x gradlew
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
-
-      # If you also want a release APK, uncomment this (requires a signing
-      # config set up in build.gradle.kts, otherwise it will be unsigned):
-      # - name: Build release APK
-      #   run: ./gradlew assembleRelease --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
