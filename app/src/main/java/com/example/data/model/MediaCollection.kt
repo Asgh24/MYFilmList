@@ -5,7 +5,9 @@ data class MediaCollection(
     val title: String,
     val mediaType: MediaType,
     val items: List<MediaItem>,
-    val primaryMetadata: MediaMetadata?
+    val primaryMetadata: MediaMetadata?,
+    val needsReview: Boolean = false,
+    val candidateMatches: List<CandidateMatch> = emptyList()
 ) {
     val totalCount: Int get() = items.size
 

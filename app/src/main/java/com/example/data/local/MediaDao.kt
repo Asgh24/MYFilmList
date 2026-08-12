@@ -29,7 +29,7 @@ interface MediaDao {
     @Query("DELETE FROM media_items WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)
 
-    @Query("UPDATE media_items SET cleanTitle = :newTitle, detectedType = :newType, titleEnglish = :titleEng, titleRomaji = :titleRom, synopsis = :synopsis, posterUrl = :poster, rating = :rating, genresJson = :genres WHERE id IN (:ids)")
+    @Query("UPDATE media_items SET cleanTitle = :newTitle, detectedType = :newType, titleEnglish = :titleEng, titleRomaji = :titleRom, synopsis = :synopsis, posterUrl = :poster, rating = :rating, genresJson = :genres, needsReview = 0, candidatesJson = NULL WHERE id IN (:ids)")
     suspend fun updateCollectionMetadata(
         ids: List<String>,
         newTitle: String,
@@ -40,6 +40,13 @@ interface MediaDao {
         poster: String?,
         rating: Double?,
         genres: String?
+    )
+
+    @Query("UPDATE media_items SET needsReview = :needsReview, candidatesJson = :candidatesJson WHERE id IN (:ids)")
+    suspend fun updateCollectionReviewStatus(
+        ids: List<String>,
+        needsReview: Boolean,
+        candidatesJson: String?
     )
 
     @Query("UPDATE media_items SET isWatched = :isWatched, playbackPositionMs = :position WHERE id = :id")

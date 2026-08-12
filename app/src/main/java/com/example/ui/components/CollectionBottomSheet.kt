@@ -90,6 +90,7 @@ fun CollectionBottomSheet(
     onToggleFavorite: (MediaItem) -> Unit,
     onMarkAllWatched: (Boolean) -> Unit = {},
     onReAnalyzeCollection: () -> Unit = {},
+    onOpenCandidateReview: () -> Unit = {},
     onDeleteCollection: () -> Unit = {},
     onRecommendationClick: (RecommendationItem) -> Unit,
     modifier: Modifier = Modifier
@@ -277,6 +278,63 @@ fun CollectionBottomSheet(
                                         color = TextSecondary
                                     )
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Uncertain AI Candidate Review Banner
+            if (collection.needsReview || collection.candidateMatches.isNotEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clickable { onOpenCandidateReview() },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF59E0B).copy(alpha = 0.15f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("⚠️", fontSize = 20.sp)
+                                Column {
+                                    Text(
+                                        text = "مجموعه نیازمند تایید نام است!",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFF59E0B)
+                                    )
+                                    Text(
+                                        text = "هوش مصنوعی چند کاندیدای مختلف برای این اثر پیدا کرده است.",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = onOpenCandidateReview,
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B))
+                            ) {
+                                Text(
+                                    text = "انتخاب کاندیدا 🎯",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
                             }
                         }
                     }

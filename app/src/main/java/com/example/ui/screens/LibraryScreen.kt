@@ -160,6 +160,10 @@ fun MainScreen(
     val isAnalyzingCollection by viewModel.isAnalyzingCollection.collectAsStateWithLifecycle()
     val proposedCollectionMetadata by viewModel.proposedCollectionMetadata.collectAsStateWithLifecycle()
 
+    val candidateReviewCollection by viewModel.candidateReviewCollection.collectAsStateWithLifecycle()
+    val isFetchingCandidates by viewModel.isFetchingCandidates.collectAsStateWithLifecycle()
+    val candidatesForReview by viewModel.candidatesForReview.collectAsStateWithLifecycle()
+
     // Permission launcher for Android Storage
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -812,6 +816,7 @@ fun MainScreen(
                         onToggleFavorite = { viewModel.toggleFavorite(it) },
                         onMarkAllWatched = { isWatched -> viewModel.markAllInCollectionAsWatched(collection, isWatched) },
                         onReAnalyzeCollection = { viewModel.reAnalyzeCollectionWithAi(collection) },
+                        onOpenCandidateReview = { viewModel.openCandidateReviewSheet(collection) },
                         onDeleteCollection = { viewModel.deleteCollection(collection) },
                         onRecommendationClick = { rec ->
                             Toast.makeText(context, "عنوان پیشنهادی: ${rec.title}", Toast.LENGTH_SHORT).show()
@@ -910,6 +915,25 @@ fun MainScreen(
                     keyTestStatus = keyTestStatus,
                     onSaveAndTestKey = { key -> viewModel.saveAndTestGeminiApiKey(key) },
                     onDismiss = { viewModel.dismissApiKeyOnboarding() }
+                )
+            }
+
+            candidateReviewCollection?.let { col ->
+                com.example.ui.components.CollectionCandidateReviewSheet(
+                    collection = col,
+                    candidates = candidatesForReview,
+                    isFetchingCandidates = isFetchingCandidates,
+                    onSelectCandidate = { candidate ->
+                        viewModel.confirmCandidateForCollection(col, candidate)
+                        Toast.makeText(context, "مجموعه با موفقیت به «${candidate.title}» تغییر یافت", Toast.LENGTH_SHORT).show()
+                    },
+                    onConfirmManualEntry = { customTitle, mediaType, synopsis, posterUrl ->
+                        viewModel.confirmManualEntryForCollection(col, customTitle, mediaType, synopsis, posterUrl)
+                        Toast.makeText(context, "اطلاعات دستی با موفقیت ثبت شد", Toast.LENGTH_SHORT).show()
+                    },
+                    onDismiss = {
+                        viewModel.dismissCandidateReviewSheet()
+                    }
                 )
             }
         }

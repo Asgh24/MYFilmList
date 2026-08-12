@@ -110,6 +110,30 @@ fun CollectionCard(
                     )
             )
 
+            // Top-left "Needs Review / Uncertain AI" Badge
+            if (collection.needsReview || collection.candidateMatches.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFF59E0B))
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "⚠️ تایید",
+                            color = Color.Black,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             // Top-right episode / file count tag
             Box(
                 modifier = Modifier

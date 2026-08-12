@@ -343,7 +343,76 @@ class MediaRepository(private val context: Context) {
             metadata = metadata,
             isWatched = isWatched,
             playbackPositionMs = playbackPositionMs,
-            isFavorite = isFavorite
+            isFavorite = isFavorite,
+            needsReview = needsReview,
+            candidateMatches = deserializeCandidateMatches(candidatesJson)
         )
+    }
+
+    suspend fun updateCollectionReviewStatus(
+        itemIds: List<String>,
+        needsReview: Boolean,
+        candidates: List<com.example.data.model.CandidateMatch>
+    ) = withContext(Dispatchers.IO) {
+        if (itemIds.isEmpty()) return@withContext
+        val json = if (candidates.isNotEmpty()) serializeCandidateMatches(candidates) else null
+        mediaDao.updateCollectionReviewStatus(itemIds, needsReview, json)
+    }
+
+    suspend fun fetchCandidatesForCollection(
+        collectionTitle: String,
+        mediaType: MediaType,
+        targetLanguage: String = "Persian"
+    ): List<com.example.data.model.CandidateMatch> = withContext(Dispatchers.IO) {
+        GeminiMetadataService.fetchCandidateMatchesForTitle(collectionTitle, mediaType, targetLanguage)
+    }
+
+    private fun serializeCandidateMatches(candidates: List<com.example.data.model.CandidateMatch>): String {
+        val arr = org.json.JSONArray()
+        candidates.forEach { c ->
+            val obj = org.json.JSONObject()
+            obj.put("title", c.title)
+            obj.put("englishTitle", c.englishTitle)
+            obj.put("romajiTitle", c.romajiTitle)
+            obj.put("releaseYear", c.releaseYear)
+            obj.put("mediaType", c.mediaType.name)
+            obj.put("posterUrl", c.posterUrl)
+            obj.put("synopsis", c.synopsis)
+            obj.put("rating", c.rating)
+            obj.put("scoreSource", c.scoreSource)
+            obj.put("explanation", c.explanation)
+            arr.put(obj)
+        }
+        return arr.toString()
+    }
+
+    private fun deserializeCandidateMatches(jsonStr: String?): List<com.example.data.model.CandidateMatch> {
+        if (jsonStr.isNull_or_empty()) return emptyList()
+        val result = mutableListOf<com.example.data.model.CandidateMatch>()
+        try {
+            val arr = org.json.JSONArray(jsonStr)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val typeStr = obj.optString("mediaType", "ANIME")
+                val mType = try { MediaType.valueOf(typeStr) } catch (e: Exception) { MediaType.ANIME }
+                result.add(
+                    com.example.data.model.CandidateMatch(
+                        title = obj.optString("title", ""),
+                        englishTitle = obj.optString("englishTitle", null),
+                        romajiTitle = obj.optString("romajiTitle", null),
+                        releaseYear = if (obj.has("releaseYear") && !obj.isNull("releaseYear")) obj.getInt("releaseYear") else null,
+                        mediaType = mType,
+                        posterUrl = obj.optString("posterUrl", null),
+                        synopsis = obj.optString("synopsis", null),
+                        rating = if (obj.has("rating") && !obj.isNull("rating")) obj.getDouble("rating") else null,
+                        scoreSource = obj.optString("scoreSource", "Gemini AI"),
+                        explanation = obj.optString("explanation", null)
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return result
     }
 }

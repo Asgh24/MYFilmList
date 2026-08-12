@@ -10,5 +10,7 @@ data class MediaItem(
     val metadata: MediaMetadata? = null,
     val isWatched: Boolean = false,
     val playbackPositionMs: Long = 0L,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val needsReview: Boolean = false,
+    val candidateMatches: List<CandidateMatch> = emptyList()
 )

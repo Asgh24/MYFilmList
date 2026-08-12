@@ -281,12 +281,17 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
                 ?: firstItem.parsedInfo.cleanTitle
             val meta = sortedItems.firstOrNull { it.metadata != null }?.metadata ?: firstItem.metadata
 
+            val needsReview = sortedItems.any { it.needsReview }
+            val candidateMatches = sortedItems.firstOrNull { it.candidateMatches.isNotEmpty() }?.candidateMatches ?: emptyList()
+
             MediaCollection(
                 collectionKey = key,
                 title = canonicalName,
                 mediaType = firstItem.parsedInfo.detectedType,
                 items = sortedItems,
-                primaryMetadata = meta
+                primaryMetadata = meta,
+                needsReview = needsReview,
+                candidateMatches = candidateMatches
             )
         }
 
@@ -356,6 +361,132 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissAiConfirmationSheet() {
         showAiConfirmationSheet.value = false
+    }
+
+    val candidateReviewCollection = MutableStateFlow<MediaCollection?>(null)
+    val isFetchingCandidates = MutableStateFlow(false)
+    val candidatesForReview = MutableStateFlow<List<com.example.data.model.CandidateMatch>>(emptyList())
+
+    fun openCandidateReviewSheet(collection: MediaCollection) {
+        viewModelScope.launch {
+            candidateReviewCollection.value = collection
+            if (collection.candidateMatches.isNotEmpty()) {
+                candidatesForReview.value = collection.candidateMatches
+            } else {
+                isFetchingCandidates.value = true
+                val fetched = repository.fetchCandidatesForCollection(
+                    collectionTitle = collection.title,
+                    mediaType = collection.mediaType,
+                    targetLanguage = targetLanguage.value
+                )
+                candidatesForReview.value = fetched
+                isFetchingCandidates.value = false
+            }
+        }
+    }
+
+    fun dismissCandidateReviewSheet() {
+        candidateReviewCollection.value = null
+        candidatesForReview.value = emptyList()
+        isFetchingCandidates.value = false
+    }
+
+    fun confirmCandidateForCollection(collection: MediaCollection, candidate: com.example.data.model.CandidateMatch) {
+        viewModelScope.launch {
+            val newTitle = candidate.title
+            val newType = candidate.mediaType
+            val updatedMeta = MediaMetadata(
+                titleRomaji = candidate.romajiTitle ?: candidate.title,
+                titleEnglish = candidate.englishTitle ?: candidate.title,
+                synopsis = candidate.synopsis ?: "اطلاعات تایید شده توسط کاربر.",
+                posterUrl = candidate.posterUrl,
+                bannerUrl = candidate.posterUrl,
+                rating = candidate.rating ?: 8.5,
+                scoreSource = candidate.scoreSource,
+                genres = listOf(newType.name),
+                releaseYear = candidate.releaseYear,
+                totalEpisodes = collection.totalCount
+            )
+
+            val itemIds = collection.items.map { it.id }
+            repository.updateCollectionMetadata(itemIds, newTitle, newType, updatedMeta)
+
+            val newAiMap = aiCanonicalTitles.value.toMutableMap()
+            collection.items.forEach { item ->
+                newAiMap[item.parsedInfo.cleanTitle.trim()] = newTitle
+                newAiMap[item.fileName.trim()] = newTitle
+            }
+            aiCanonicalTitles.value = newAiMap
+
+            dismissCandidateReviewSheet()
+
+            if (selectedCollection.value?.collectionKey == collection.collectionKey) {
+                selectedCollection.value = collection.copy(
+                    title = newTitle,
+                    mediaType = newType,
+                    primaryMetadata = updatedMeta,
+                    needsReview = false,
+                    candidateMatches = emptyList()
+                )
+            }
+        }
+    }
+
+    fun confirmManualEntryForCollection(
+        collection: MediaCollection,
+        customTitle: String,
+        mediaType: MediaType,
+        synopsis: String,
+        posterUrl: String
+    ) {
+        viewModelScope.launch {
+            val title = customTitle.trim().ifBlank { collection.title }
+            val updatedMeta = MediaMetadata(
+                titleRomaji = title,
+                titleEnglish = title,
+                synopsis = synopsis.ifBlank { "ورودی دستی کاربر" },
+                posterUrl = posterUrl.ifBlank { collection.posterUrl },
+                rating = 8.5,
+                scoreSource = "Manual Entry",
+                genres = listOf(mediaType.name),
+                releaseYear = 2023,
+                totalEpisodes = collection.totalCount
+            )
+
+            val itemIds = collection.items.map { it.id }
+            repository.updateCollectionMetadata(itemIds, title, mediaType, updatedMeta)
+
+            val newAiMap = aiCanonicalTitles.value.toMutableMap()
+            collection.items.forEach { item ->
+                newAiMap[item.parsedInfo.cleanTitle.trim()] = title
+                newAiMap[item.fileName.trim()] = title
+            }
+            aiCanonicalTitles.value = newAiMap
+
+            dismissCandidateReviewSheet()
+
+            if (selectedCollection.value?.collectionKey == collection.collectionKey) {
+                selectedCollection.value = collection.copy(
+                    title = title,
+                    mediaType = mediaType,
+                    primaryMetadata = updatedMeta,
+                    needsReview = false,
+                    candidateMatches = emptyList()
+                )
+            }
+        }
+    }
+
+    fun flagCollectionForReview(collection: MediaCollection) {
+        viewModelScope.launch {
+            val fetched = repository.fetchCandidatesForCollection(
+                collectionTitle = collection.title,
+                mediaType = collection.mediaType,
+                targetLanguage = targetLanguage.value
+            )
+            val itemIds = collection.items.map { it.id }
+            repository.updateCollectionReviewStatus(itemIds, true, fetched)
+        }
     }
 
     fun scanLocalFiles(customFolder: String? = null, includeDemoFallback: Boolean = false) {
