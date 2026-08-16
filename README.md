@@ -1,5 +1,10 @@
 # myFILMlist
 
+[![Android CI](https://github.com/Asgh24/MYFilmList/actions/workflows/android-build.yml/badge.svg)](https://github.com/Asgh24/MYFilmList/actions/workflows/android-build.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.2-orange)](https://kotlinlang.org/)
+[![Android](https://img.shields.io/badge/minSdk-24-brightgreen)](https://developer.android.com/)
+
 مدیریت هوشمند فیلم‌ها، سریال‌ها و انیمه‌های ذخیره‌شده روی دستگاه شما. اسکن خودکار فایل‌های ویدیویی، تشخیص هوشمند نام انیمه/فیلم، دریافت متادیتا و کاور از AniList و TMDB، گروه‌بندی هوشمند مجموعه‌ها، افزودن مجموعه به صورت دستی و پیشنهادهای هوش مصنوعی.
 
 A smart local movie, series & anime library manager for Android. Automatically scans video files on your device, recognizes anime/movie/series names, fetches posters & metadata from AniList, MyAnimeList, TMDB and OMDb, groups scattered episodes into clean collections, lets you add collections manually, and recommends similar titles with Gemini AI.
@@ -85,6 +90,17 @@ To install the APK on a device: copy the `.apk` to the phone, enable "Install fr
 
 ---
 
+## 📥 Download & install the APK
+
+- **From CI artifacts (recommended):** open the latest [Android CI run](https://github.com/Asgh24/MYFilmList/actions/workflows/android-build.yml), open it, scroll to **Artifacts**, and download `myFILMlist-debug` / `myFILMlist-release` (a `.zip` containing the `.apk`). Artifacts expire after ~90 days.
+- **Build it yourself:** `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`.
+- **Installation tips:**
+  - On first install, Android asks for permission to install "unknown apps" — allow it for your file manager / browser.
+  - If the phone blocks installation because "Play Protect" is on, tap *More details → Install anyway* (only for sideloaded builds you trust).
+  - The release APK produced without the signing secrets is signed with a debug key — fine for sideloading, but a production keystore is required for Play Store distribution.
+
+---
+
 ## 🔑 API keys (optional but recommended)
 
 No key is required for the app to work — the public APIs (AniList, MAL, TVMaze, …) cover most titles.
@@ -124,6 +140,17 @@ app/src/main/java/com/example/
 ```
 
 `FileNameParserTest` covers anime/series/movie parsing and franchise normalization.
+
+---
+
+## 💡 Tips & troubleshooting
+
+- **"google-services.json is missing" warning during build:** expected and harmless — the build passes `googleServices.missing.passthrough=true` so it works without Firebase config. Only relevant if you enable Firebase features.
+- **`.env` file:** the Gradle Secrets plugin reads `.env` (falling back to `.env.example`). The placeholder `MY_GEMINI_API_KEY` is ignored at runtime, so builds never fail when no real key is set. Never commit a real `.env`.
+- **App not grouping files as expected?** Long-press a collection → *AI tools* → re-run the smart grouping, or use *re-categorize* to let the parser + AI reclassify everything.
+- **Anime files classified as movies?** The parser uses a franchise database + fansub heuristics; make sure the file name contains a recognizable franchise keyword or a fansub tag (e.g. `FarsiSub`, `[SubsPlease]`, `Erai-raws`).
+- **Slow first scan:** the first scan fetches metadata from the network for every file. Give it a moment or reduce the library size; the Gemini key makes classification faster and adds Persian synopses.
+- **No network / privacy:** user-entered API keys live only in the app's `SharedPreferences` on your device and are never uploaded anywhere.
 
 ---
 
