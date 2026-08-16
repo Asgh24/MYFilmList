@@ -556,27 +556,47 @@ object GeminiMetadataService {
     }
 
     private fun smartLocalClustering(titles: List<String>): Map<String, String> {
-        return titles.associateWith { title ->
-            val parsed = com.example.data.parser.FileNameParser.parse(title)
-            val clean = parsed.cleanTitle
-            val lower = title.lowercase()
-            when {
-                lower.contains("attack on titan") || lower.contains("shingeki") || lower.contains("اتک آن تایتان") -> "Attack on Titan (اتک آن تایتان)"
-                lower.contains("re zero") || lower.contains("re:zero") -> "Re:Zero - Starting Life in Another World"
-                lower.contains("frieren") || lower.contains("sousou") || lower.contains("فریرن") -> "Sousou no Frieren (فریرن)"
-                lower.contains("jujutsu") || lower.contains("جوجوتسو") -> "Jujutsu Kaisen (جوجوتسو کایسن)"
-                lower.contains("demon slayer") || lower.contains("kimetsu") || lower.contains("شیطان کش") -> "Demon Slayer: Kimetsu no Yaiba"
-                lower.contains("solo leveling") || lower.contains("تک روی") -> "Solo Leveling (تک روی)"
-                lower.contains("one piece") || lower.contains("وان پیس") -> "One Piece (وان پیس)"
-                lower.contains("naruto") || lower.contains("ناروتو") -> "Naruto (ناروتو)"
-                lower.contains("bleach") || lower.contains("بلیچ") -> "Bleach (بلیچ)"
-                lower.contains("chainsaw man") || lower.contains("مرد اره ای") -> "Chainsaw Man"
-                lower.contains("breaking bad") -> "Breaking Bad"
-                clean.isNotBlank() -> clean
-                else -> title.replace("(?i)\\b(AioFilm|Film2Media|AnimeList|Soft98|DigiMoviez|ZarFilm|FilmBaran|Film2Movie|Bi2Media|MovieSub|300MB|FarsiSub|FaSub|Dubbed|Persian|Farsi|DualAudio|SoftSub|HardSub)\\b".toRegex(), " ")
-                             .replace("\\s+".toRegex(), " ").trim()
+        // 1. Canonicalize every title through the smart filename parser
+        //    (handles franchise normalization + site-tag cleanup in one place).
+        val cleaned = titles.associateWith { com.example.data.parser.FileNameParser.canonicalizeTitle(it) }
+
+        // 2. Fuzzy merge: group cleaned titles that share a high token overlap so
+        //    slightly different spellings of the same franchise still collapse.
+        val canonicalByClean = mutableMapOf<String, String>()
+        val representatives = mutableListOf<Pair<String, Set<String>>>()
+        cleaned.values.forEach { clean ->
+            if (clean.isBlank()) {
+                canonicalByClean[clean] = clean
+                return@forEach
+            }
+            val tokens = clean.toTokenSet()
+            val match = representatives.firstOrNull { (_, repTokens) ->
+                tokens.size >= 2 && repTokens.size >= 2 &&
+                    tokenOverlap(tokens, repTokens) >= 0.8
+            }
+            if (match != null) {
+                canonicalByClean[clean] = match.first
+            } else {
+                representatives.add(clean to tokens)
+                canonicalByClean[clean] = clean
             }
         }
+        return cleaned.mapValues { (_, clean) -> canonicalByClean.getValue(clean) }
+    }
+
+    private fun tokenOverlap(a: Set<String>, b: Set<String>): Double {
+        val intersection = a.intersect(b).size.toDouble()
+        val minSize = minOf(a.size, b.size).toDouble()
+        return if (minSize == 0.0) 0.0 else intersection / minSize
+    }
+
+    private fun String.toTokenSet(): Set<String> {
+        return lowercase()
+            .replace(Regex("[^a-z0-9ا-ی]+"), " ")
+            .trim()
+            .split(Regex("\\s+"))
+            .filter { it.length > 1 }
+            .toSet()
     }
 
     suspend fun reCategorizeSelectedFilesWithGemini(
@@ -661,7 +681,8 @@ object GeminiMetadataService {
     private fun smartLocalRecategorize(selectedItems: List<MediaItem>): List<FileRecategorizationResult> {
         return selectedItems.map { item ->
             val clean = com.example.data.parser.FileNameParser.parse(item.fileName)
-            val isAnime = clean.detectedType == MediaType.ANIME || item.fileName.contains("sub", ignoreCase = true) || item.fileName.contains("farsi", ignoreCase = true)
+            val isAnime = clean.detectedType == MediaType.ANIME ||
+                com.example.data.parser.FileNameParser.isAnimeCandidate(item.fileName)
 
             val explanation = buildString {
                 append("پاکسازی تگ‌های دانلود و واترپارک سایت‌ها. ")

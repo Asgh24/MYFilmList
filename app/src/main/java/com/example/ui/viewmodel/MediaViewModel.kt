@@ -86,6 +86,8 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
     val isAnalyzingCollection = MutableStateFlow(false)
     val proposedCollectionMetadata = MutableStateFlow<com.example.data.model.MediaMetadata?>(null)
 
+    val showManualAddSheet = MutableStateFlow(false)
+
     val isScanning = MutableStateFlow(false)
     val isGroupingWithAi = MutableStateFlow(false)
     val scanProgress = MutableStateFlow(0 to 0)
@@ -751,6 +753,36 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissCollectionAiEditSheet() {
         showCollectionAiEditSheet.value = false
         proposedCollectionMetadata.value = null
+    }
+
+    fun openManualAddSheet() {
+        showManualAddSheet.value = true
+    }
+
+    fun dismissManualAddSheet() {
+        showManualAddSheet.value = false
+    }
+
+    fun addManualCollection(input: com.example.data.model.ManualCollectionInput) {
+        viewModelScope.launch {
+            val title = input.title.trim()
+            if (title.isBlank()) {
+                showManualAddSheet.value = false
+                return@launch
+            }
+
+            val result = repository.addManualCollection(input, targetLanguage.value)
+            if (result.ids.isNotEmpty()) {
+                // Register canonical titles so smart grouping merges them correctly.
+                val newAiMap = aiCanonicalTitles.value.toMutableMap()
+                result.cleanTitles.forEach { clean ->
+                    newAiMap[clean] = title
+                }
+                newAiMap[title] = title
+                aiCanonicalTitles.value = newAiMap
+            }
+            showManualAddSheet.value = false
+        }
     }
 
     fun deleteCollection(collection: MediaCollection) {

@@ -55,6 +55,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -78,6 +79,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.example.data.model.MediaCollection
@@ -159,6 +161,8 @@ fun MainScreen(
     val showCollectionAiEditSheet by viewModel.showCollectionAiEditSheet.collectAsStateWithLifecycle()
     val isAnalyzingCollection by viewModel.isAnalyzingCollection.collectAsStateWithLifecycle()
     val proposedCollectionMetadata by viewModel.proposedCollectionMetadata.collectAsStateWithLifecycle()
+
+    val showManualAddSheet by viewModel.showManualAddSheet.collectAsStateWithLifecycle()
 
     val candidateReviewCollection by viewModel.candidateReviewCollection.collectAsStateWithLifecycle()
     val isFetchingCandidates by viewModel.isFetchingCandidates.collectAsStateWithLifecycle()
@@ -277,21 +281,40 @@ fun MainScreen(
         },
         floatingActionButton = {
             if (currentTab == NavigationTab.LIBRARY) {
-                FloatingActionButton(
-                    onClick = { viewModel.scanLocalFiles(includeDemoFallback = false) },
-                    containerColor = PrimaryIndigo,
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.testTag("floating_scan_button")
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (isScanning) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            strokeWidth = 3.dp,
-                            modifier = Modifier.size(24.dp)
+                    SmallFloatingActionButton(
+                        onClick = { viewModel.openManualAddSheet() },
+                        containerColor = MaterialTheme.colorScheme.cardSurface,
+                        contentColor = PrimaryIndigo,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.testTag("floating_add_manual_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "افزودن مجموعه دستی",
+                            tint = PrimaryIndigo
                         )
-                    } else {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "اسکن", tint = Color.White)
+                    }
+
+                    FloatingActionButton(
+                        onClick = { viewModel.scanLocalFiles(includeDemoFallback = false) },
+                        containerColor = PrimaryIndigo,
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.testTag("floating_scan_button")
+                    ) {
+                        if (isScanning) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 3.dp,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        } else {
+                            Icon(imageVector = Icons.Default.Refresh, contentDescription = "اسکن", tint = Color.White)
+                        }
                     }
                 }
             }
@@ -915,6 +938,20 @@ fun MainScreen(
                     keyTestStatus = keyTestStatus,
                     onSaveAndTestKey = { key -> viewModel.saveAndTestGeminiApiKey(key) },
                     onDismiss = { viewModel.dismissApiKeyOnboarding() }
+                )
+            }
+
+            if (showManualAddSheet) {
+                com.example.ui.components.ManualAddCollectionSheet(
+                    onConfirm = { input ->
+                        viewModel.addManualCollection(input)
+                        Toast.makeText(
+                            context,
+                            if (strings.isFa) "مجموعه «${input.title}» به کتابخانه اضافه شد" else "Collection \"${input.title}\" added",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onDismiss = { viewModel.dismissManualAddSheet() }
                 )
             }
 

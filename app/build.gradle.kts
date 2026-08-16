@@ -25,17 +25,24 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
-    }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+      // Production signing is driven entirely by CI secrets. When those are absent
+      // (e.g. PR builds), fall back to the auto-generated debug keystore so the
+      // release APK is still produced and installable without a real key.
+      val envPath = System.getenv("KEYSTORE_PATH")
+      val envStore = System.getenv("STORE_PASSWORD")
+      val envKey = System.getenv("KEY_PASSWORD")
+      val useEnv = !envPath.isNullOrBlank() && !envStore.isNullOrBlank() && !envKey.isNullOrBlank()
+      if (useEnv) {
+        storeFile = file(envPath)
+        storePassword = envStore
+        keyAlias = "upload"
+        keyPassword = envKey
+      } else {
+        storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
     }
   }
 
@@ -46,7 +53,10 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
+    debug {
+      // Uses AGP's built-in debug keystore (auto-generated if missing).
+      signingConfig = signingConfigs.getByName("debug")
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 
 class MediaRepository(private val context: Context) {
 
@@ -75,63 +76,140 @@ class MediaRepository(private val context: Context) {
             itemsToEnrich.map { entity ->
                 async {
                     semaphore.withPermit {
-                        val cleanTitle = entity.cleanTitle
-                        val mediaType = try { MediaType.valueOf(entity.detectedType) } catch (e: Exception) { MediaType.UNKNOWN }
-
-                        var fetchedMetadata: MediaMetadata? = null
-
-                        // 1. If Gemini AI Key is active, query Gemini FIRST for intelligent classification and Persian synopsis!
-                        if (GeminiMetadataService.getApiKey().isNotBlank()) {
-                            val geminiResult = GeminiMetadataService.fetchMetadataAndRecommendations(
-                                rawTitle = cleanTitle,
-                                mediaType = mediaType,
-                                targetLanguage = targetLanguage
-                            )
-                            if (geminiResult != null && !geminiResult.metadata.synopsis.isNullOrBlank()) {
-                                fetchedMetadata = geminiResult.metadata
-                            }
-                        }
-
-                        // 2. If Gemini is not active or returned null, query Public Media API (which prioritizes AniList/MAL for anime)
-                        if (fetchedMetadata == null) {
-                            val publicResult = PublicMediaApiClient.fetchAccurateMetadata(
-                                cleanTitle = cleanTitle,
-                                mediaType = mediaType,
-                                targetLanguage = targetLanguage
-                            )
-                            if (publicResult != null) {
-                                fetchedMetadata = publicResult.metadata
-                            }
-                        }
-
-                        // 3. Additional fallback to AniListClient if media is Anime
-                        if (fetchedMetadata == null && (mediaType == MediaType.ANIME || com.example.data.parser.FileNameParser.isAnimeCandidate(cleanTitle))) {
-                            val aniResult = AniListClient.fetchAnimeMetadata(cleanTitle)
-                            if (aniResult != null) {
-                                fetchedMetadata = aniResult.metadata
-                            }
-                        }
-
-                        if (fetchedMetadata != null) {
-                            val updatedEntity = entity.copy(
-                                titleRomaji = fetchedMetadata.titleRomaji ?: entity.titleRomaji,
-                                titleEnglish = fetchedMetadata.titleEnglish ?: entity.titleEnglish,
-                                titleNative = fetchedMetadata.titleNative ?: entity.titleNative,
-                                synopsis = fetchedMetadata.synopsis ?: entity.synopsis,
-                                posterUrl = fetchedMetadata.posterUrl ?: entity.posterUrl,
-                                bannerUrl = fetchedMetadata.bannerUrl ?: entity.bannerUrl,
-                                rating = fetchedMetadata.rating ?: entity.rating,
-                                scoreSource = fetchedMetadata.scoreSource ?: entity.scoreSource,
-                                genresJson = fetchedMetadata.genres.joinToString(",").ifEmpty { entity.genresJson },
-                                releaseYear = fetchedMetadata.releaseYear ?: entity.releaseYear,
-                                totalEpisodes = fetchedMetadata.totalEpisodes ?: entity.totalEpisodes
-                            )
-                            mediaDao.insertOrUpdate(updatedEntity)
-                        }
+                        enrichEntity(entity, targetLanguage)
                     }
                 }
             }.awaitAll()
         }
+    }
+
+    /**
+     * Fetches metadata for a single entity from Gemini (first), then the public
+     * media APIs, then AniList, and persists the result when found.
+     */
+    private suspend fun enrichEntity(entity: MediaEntity, targetLanguage: String = "English") {
+        val cleanTitle = entity.cleanTitle
+        val mediaType = try { MediaType.valueOf(entity.detectedType) } catch (e: Exception) { MediaType.UNKNOWN }
+
+        var fetchedMetadata: MediaMetadata? = null
+
+        // 1. If Gemini AI Key is active, query Gemini FIRST for intelligent classification and Persian synopsis!
+        if (GeminiMetadataService.getApiKey().isNotBlank()) {
+            val geminiResult = GeminiMetadataService.fetchMetadataAndRecommendations(
+                rawTitle = cleanTitle,
+                mediaType = mediaType,
+                targetLanguage = targetLanguage
+            )
+            if (geminiResult != null && !geminiResult.metadata.synopsis.isNullOrBlank()) {
+                fetchedMetadata = geminiResult.metadata
+            }
+        }
+
+        // 2. If Gemini is not active or returned null, query Public Media API (which prioritizes AniList/MAL for anime)
+        if (fetchedMetadata == null) {
+            val publicResult = PublicMediaApiClient.fetchAccurateMetadata(
+                cleanTitle = cleanTitle,
+                mediaType = mediaType,
+                targetLanguage = targetLanguage
+            )
+            if (publicResult != null) {
+                fetchedMetadata = publicResult.metadata
+            }
+        }
+
+        // 3. Additional fallback to AniListClient if media is Anime
+        if (fetchedMetadata == null && (mediaType == MediaType.ANIME || com.example.data.parser.FileNameParser.isAnimeCandidate(cleanTitle))) {
+            val aniResult = AniListClient.fetchAnimeMetadata(cleanTitle)
+            if (aniResult != null) {
+                fetchedMetadata = aniResult.metadata
+            }
+        }
+
+        if (fetchedMetadata != null) {
+            val updatedEntity = entity.copy(
+                titleRomaji = fetchedMetadata.titleRomaji ?: entity.titleRomaji,
+                titleEnglish = fetchedMetadata.titleEnglish ?: entity.titleEnglish,
+                titleNative = fetchedMetadata.titleNative ?: entity.titleNative,
+                synopsis = fetchedMetadata.synopsis ?: entity.synopsis,
+                posterUrl = fetchedMetadata.posterUrl ?: entity.posterUrl,
+                bannerUrl = fetchedMetadata.bannerUrl ?: entity.bannerUrl,
+                rating = fetchedMetadata.rating ?: entity.rating,
+                scoreSource = fetchedMetadata.scoreSource ?: entity.scoreSource,
+                genresJson = fetchedMetadata.genres.joinToString(",").ifEmpty { entity.genresJson },
+                releaseYear = fetchedMetadata.releaseYear ?: entity.releaseYear,
+                totalEpisodes = fetchedMetadata.totalEpisodes ?: entity.totalEpisodes
+            )
+            mediaDao.insertOrUpdate(updatedEntity)
+        }
+    }
+
+    /**
+     * Inserts a collection created fully manually by the user (no file scan),
+     * then kicks off background metadata enrichment for its first item.
+     */
+    suspend fun addManualCollection(
+        input: com.example.data.model.ManualCollectionInput,
+        targetLanguage: String = "English"
+    ): com.example.data.model.ManualCollectionResult = withContext(Dispatchers.IO) {
+        val title = input.title.trim().ifBlank { return@withContext com.example.data.model.ManualCollectionResult(emptyList(), emptyList()) }
+        val now = System.currentTimeMillis()
+
+        val episodes = input.episodes.ifEmpty {
+            listOf(com.example.data.model.ManualEpisode(fileName = "$title.mkv"))
+        }
+
+        val entities = episodes.map { ep ->
+            val fileName = ep.fileName.trim().ifBlank { buildString {
+                append(title)
+                ep.season?.let { append(" - Season $it") }
+                ep.episode?.let { append(" - Episode $it") }
+                append(".mkv")
+            } }
+            val parsed = com.example.data.parser.FileNameParser.parse(fileName)
+            MediaEntity(
+                id = "manual_${UUID.randomUUID()}",
+                filePath = "",
+                fileName = fileName,
+                fileSize = 0L,
+                lastModified = now,
+                cleanTitle = parsed.cleanTitle.ifBlank { title },
+                season = ep.season ?: parsed.season,
+                episode = ep.episode ?: parsed.episode,
+                year = parsed.year,
+                resolution = parsed.resolution,
+                codec = parsed.codec,
+                releaseGroup = parsed.releaseGroup,
+                detectedType = input.mediaType.name,
+                titleRomaji = title,
+                titleEnglish = title,
+                titleNative = title,
+                synopsis = input.synopsis.trim().ifBlank { null },
+                posterUrl = input.posterUrl.trim().ifBlank { null },
+                bannerUrl = input.posterUrl.trim().ifBlank { null },
+                rating = null,
+                scoreSource = "Manual Entry",
+                genresJson = input.mediaType.name,
+                releaseYear = null,
+                totalEpisodes = null,
+                isWatched = false,
+                playbackPositionMs = 0L,
+                isFavorite = false,
+                needsReview = false,
+                candidatesJson = null
+            )
+        }
+
+        mediaDao.insertAll(entities)
+
+        // Enrich the first item so posters / synopses appear without a full rescan.
+        entities.firstOrNull()?.let {
+            enrichEntity(it, targetLanguage)
+        }
+
+        com.example.data.model.ManualCollectionResult(
+            ids = entities.map { it.id },
+            cleanTitles = entities.map { it.cleanTitle }.distinct()
+        )
     }
 
     suspend fun getRecommendationsForMedia(
